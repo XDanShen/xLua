@@ -40,7 +40,6 @@ public:
 
     bool IsNan() const { return (u_ & kExponentMask) == kExponentMask && Significand() != 0; }
     bool IsInf() const { return (u_ & kExponentMask) == kExponentMask && Significand() == 0; }
-    bool IsNanOrInf() const { return (u_ & kExponentMask) == kExponentMask; }
     bool IsNormal() const { return (u_ & kExponentMask) != 0 || Significand() == 0; }
     bool IsZero() const { return (u_ & (kExponentMask | kSignificandMask)) == 0; }
 
@@ -48,13 +47,13 @@ public:
     int IntegerExponent() const { return (IsNormal() ? Exponent() : kDenormalExponent) - kSignificandSize; }
     uint64_t ToBias() const { return (u_ & kSignMask) ? ~u_ + 1 : u_ | kSignMask; }
 
-    static int EffectiveSignificandSize(int order) {
+    static unsigned EffectiveSignificandSize(int order) {
         if (order >= -1021)
             return 53;
         else if (order <= -1074)
             return 0;
         else
-            return order + 1074;
+            return static_cast<unsigned>(order) + 1074;
     }
 
 private:

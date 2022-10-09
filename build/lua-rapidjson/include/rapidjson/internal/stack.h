@@ -15,9 +15,8 @@
 #ifndef RAPIDJSON_INTERNAL_STACK_H_
 #define RAPIDJSON_INTERNAL_STACK_H_
 
-#include "../allocators.h"
+#include "../rapidjson.h"
 #include "swap.h"
-#include <cstddef>
 
 #if defined(__clang__)
 RAPIDJSON_DIAG_PUSH
@@ -39,6 +38,7 @@ public:
     // Optimization note: Do not allocate memory for stack_ in constructor.
     // Do it lazily when first Push() -> Expand() -> Resize().
     Stack(Allocator* allocator, size_t stackCapacity) : allocator_(allocator), ownAllocator_(0), stack_(0), stackTop_(0), stackEnd_(0), initialCapacity_(stackCapacity) {
+        RAPIDJSON_ASSERT(stackCapacity > 0);
     }
 
 #if RAPIDJSON_HAS_CXX11_RVALUE_REFS
@@ -101,7 +101,7 @@ public:
     void ShrinkToFit() { 
         if (Empty()) {
             // If the stack is empty, completely deallocate the memory.
-            Allocator::Free(stack_); // NOLINT (+clang-analyzer-unix.Malloc)
+            Allocator::Free(stack_);
             stack_ = 0;
             stackTop_ = 0;
             stackEnd_ = 0;
@@ -115,7 +115,7 @@ public:
     template<typename T>
     RAPIDJSON_FORCEINLINE void Reserve(size_t count = 1) {
          // Expand the stack if needed
-        if (RAPIDJSON_UNLIKELY(static_cast<std::ptrdiff_t>(sizeof(T) * count) > (stackEnd_ - stackTop_)))
+        if (RAPIDJSON_UNLIKELY(stackTop_ + sizeof(T) * count > stackEnd_))
             Expand<T>(count);
     }
 
@@ -127,8 +127,7 @@ public:
 
     template<typename T>
     RAPIDJSON_FORCEINLINE T* PushUnsafe(size_t count = 1) {
-        RAPIDJSON_ASSERT(stackTop_);
-        RAPIDJSON_ASSERT(static_cast<std::ptrdiff_t>(sizeof(T) * count) <= (stackEnd_ - stackTop_));
+        RAPIDJSON_ASSERT(stackTop_ + sizeof(T) * count <= stackEnd_);
         T* ret = reinterpret_cast<T*>(stackTop_);
         stackTop_ += sizeof(T) * count;
         return ret;
@@ -148,22 +147,7 @@ public:
     }
 
     template<typename T>
-    const T* Top() const {
-        RAPIDJSON_ASSERT(GetSize() >= sizeof(T));
-        return reinterpret_cast<T*>(stackTop_ - sizeof(T));
-    }
-
-    template<typename T>
-    T* End() { return reinterpret_cast<T*>(stackTop_); }
-
-    template<typename T>
-    const T* End() const { return reinterpret_cast<T*>(stackTop_); }
-
-    template<typename T>
     T* Bottom() { return reinterpret_cast<T*>(stack_); }
-
-    template<typename T>
-    const T* Bottom() const { return reinterpret_cast<T*>(stack_); }
 
     bool HasAllocator() const {
         return allocator_ != 0;
@@ -173,7 +157,6 @@ public:
         RAPIDJSON_ASSERT(allocator_);
         return *allocator_;
     }
-
     bool Empty() const { return stackTop_ == stack_; }
     size_t GetSize() const { return static_cast<size_t>(stackTop_ - stack_); }
     size_t GetCapacity() const { return static_cast<size_t>(stackEnd_ - stack_); }
@@ -185,7 +168,7 @@ private:
         size_t newCapacity;
         if (stack_ == 0) {
             if (!allocator_)
-                ownAllocator_ = allocator_ = RAPIDJSON_NEW(Allocator)();
+                ownAllocator_ = allocator_ = RAPIDJSON_NEW(Allocator());
             newCapacity = initialCapacity_;
         } else {
             newCapacity = GetCapacity();
